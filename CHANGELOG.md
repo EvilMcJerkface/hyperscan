@@ -2,6 +2,49 @@
 
 This is a list of notable changes to Hyperscan, in reverse chronological order.
 
+## [5.3.0] 2020-05-15
+- Improvement on literal matcher "Teddy" performance, including support for
+  Intel(R) AVX-512 Vector Byte Manipulation Instructions (Intel(R) AVX-512
+  VBMI).
+- Improvement on single-byte/two-byte matching performance, including support
+  for Intel(R) Advanced Vector Extensions 512 (Intel(R) AVX-512).
+- hsbench: add hyphen support for -T option.
+- tools/fuzz: add test scripts for synthetic pattern generation.
+- Bugfix for acceleration path analysis in LimEx NFA.
+- Bugfix for duplicate matches for Small-write engine.
+- Bugfix for UTF8 checking problem for hscollider.
+- Bugfix for issue #205: avoid crash of `hs_compile_lit_multi()` with clang and
+  ASAN.
+- Bugfix for issue #211: fix error in `db_check_platform()` function.
+- Bugfix for issue #217: fix cmake parsing issue of CPU arch for non-English
+  locale.
+- Bugfix for issue #228: avoid undefined behavior when calling `close()` after
+  `fdopendir()` in `loadExpressions()`.
+- Bugfix for issue #239: fix hyperscan compile issue under gcc-10.
+- Add VLAN packets processing capability in pcap analysis script. (#214)
+- Avoid extra convert instruction for "Noodle". (#221)
+- Add Hyperscan version marcro in `hs.h`. (#222)
+
+## [5.2.1] 2019-10-13
+- Bugfix for issue #186: fix compile issue when `BUILD_SHARED_LIBS` is on in
+  release mode.
+- Disable redundant move check for older compiler versions.
+
+## [5.2.0] 2019-07-12
+- Literal API: add new API `hs_compile_lit()` and `hs_compile_lit_multi()` to
+  process pure literal rule sets. The 2 literal APIs treat each expression text
+  in a literal sense without recognizing any regular grammers.
+- Logical combination: add support for purely negative combinations, which
+  report match at EOD in case of no sub-expressions matched.
+- Windows porting: support shared library (DLL) on Windows with available tools
+  hscheck, hsbench and hsdump.
+- Bugfix for issue #148: fix uninitialized use of `scatter_unit_uX` due to
+  padding.
+- Bugfix for issue #155: fix numerical result out of range error.
+- Bugfix for issue #165: avoid corruption of pending combination report in
+  streaming mode.
+- Bugfix for issue #174: fix scratch free issue when memory allocation fails.
+
 ## [5.1.1] 2019-04-03
 - Add extra detection and handling when invalid rose programs are triggered.
 - Bugfix for issue #136: fix CMake parsing of CPU architecure for GCC-9.

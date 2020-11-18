@@ -2,8 +2,8 @@ cmake_minimum_required (VERSION 2.8.11)
 project (hyperscan C CXX)
 
 set (HS_MAJOR_VERSION 5)
-set (HS_MINOR_VERSION 1)
-set (HS_PATCH_VERSION 1)
+set (HS_MINOR_VERSION 3)
+set (HS_PATCH_VERSION 0)
 set (HS_VERSION ${HS_MAJOR_VERSION}.${HS_MINOR_VERSION}.${HS_PATCH_VERSION})
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
@@ -31,6 +31,7 @@ else()
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES RELEASE|RELWITHDEBINFO|MINSIZEREL)
+    message(STATUS "using release build")
     set(RELEASE_BUILD TRUE)
 else()
     set(RELEASE_BUILD FALSE)
@@ -109,11 +110,9 @@ option(BUILD_SHARED_LIBS "Build shared libs instead of static" OFF)
 option(BUILD_STATIC_AND_SHARED "Build shared libs as well as static" OFF)
 
 if (BUILD_STATIC_AND_SHARED OR BUILD_SHARED_LIBS)
-    if (WIN32)
-        message(FATAL_ERROR "Windows DLLs currently not supported")
-    else()
         message(STATUS "Building shared libraries")
-    endif()
+else()
+        message(STATUS "Building static libraries")
 endif()
 
 if (NOT BUILD_SHARED_LIBS)
@@ -151,9 +150,6 @@ if(MSVC OR MSVC_IDE)
             set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /O3 /Qstd=c99 /Qrestrict /wd4267 /Qdiag-disable:remark")
             set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2 /Qstd=c++11 /Qrestrict /QxHost /wd4267 /wd4800 /Qdiag-disable:remark -DBOOST_DETAIL_NO_CONTAINER_FWD -D_SCL_SECURE_NO_WARNINGS")
         else()
-            # todo: change these as required
-            set(ARCH_C_FLAGS "/arch:AVX2")
-            set(ARCH_CXX_FLAGS "/arch:AVX2")
             set(MSVC_WARNS "/wd4101 /wd4146 /wd4172 /wd4200 /wd4244 /wd4267 /wd4307 /wd4334 /wd4805 /wd4996 -D_CRT_SECURE_NO_WARNINGS")
             set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  /O2 ${MSVC_WARNS}")
             set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2 ${MSVC_WARNS} /wd4800 -DBOOST_DETAIL_NO_CONTAINER_FWD")
@@ -191,9 +187,9 @@ else()
         set (EXEC_ARGS ${CC_ARG1} -c -Q --help=target -march=native -mtune=native)
         execute_process(COMMAND ${CMAKE_C_COMPILER} ${EXEC_ARGS}
             OUTPUT_VARIABLE _GCC_OUTPUT)
-        string(FIND "${_GCC_OUTPUT}" "Known" POS)
-        string(SUBSTRING "${_GCC_OUTPUT}" 0 ${POS} _GCC_OUTPUT)
-        string(REGEX REPLACE ".*march=[ \t]*([^ \n]*)[ \n].*" "\\1"
+        string(FIND "${_GCC_OUTPUT}" "march" POS)
+        string(SUBSTRING "${_GCC_OUTPUT}" ${POS} -1 _GCC_OUTPUT)
+        string(REGEX REPLACE "march=[ \t]*([^ \n]*)[ \n].*" "\\1"
             GNUCC_ARCH "${_GCC_OUTPUT}")
 
         # test the parsed flag
@@ -330,7 +326,7 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
             set (FAT_RUNTIME_REQUISITES TRUE)
         endif()
     endif()
-    CMAKE_DEPENDENT_OPTION(FAT_RUNTIME "Build a library that supports multiple microarchitecures" ${RELEASE_BUILD} "FAT_RUNTIME_REQUISITES" OFF)
+    CMAKE_DEPENDENT_OPTION(FAT_RUNTIME "Build a library that supports multiple microarchitectures" ${RELEASE_BUILD} "FAT_RUNTIME_REQUISITES" OFF)
 endif ()
 
 include (${CMAKE_MODULE_PATH}/arch.cmake)
@@ -344,7 +340,7 @@ if (NOT WIN32)
 set(C_FLAGS_TO_CHECK
 # Variable length arrays are way bad, most especially at run time
 "-Wvla"
-# Pointer arith on void pointers is doing it wong.
+# Pointer arith on void pointers is doing it wrong.
  "-Wpointer-arith"
 # Build our C code with -Wstrict-prototypes -Wmissing-prototypes
  "-Wstrict-prototypes"
@@ -387,7 +383,7 @@ if (CC_PAREN_EQUALITY)
     set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -Wno-parentheses-equality")
 endif()
 
-# clang compains about unused const vars in our Ragel-generated code.
+# clang complains about unused const vars in our Ragel-generated code.
 CHECK_CXX_COMPILER_FLAG("-Wunused-const-variable" CXX_UNUSED_CONST_VAR)
 if (CXX_UNUSED_CONST_VAR)
     set(EXTRA_CXX_FLAGS "${EXTRA_CXX_FLAGS} -Wno-unused-const-variable")
@@ -397,6 +393,12 @@ endif()
 CHECK_CXX_COMPILER_FLAG("-Wignored-attributes" CXX_IGNORED_ATTR)
 if (CXX_IGNORED_ATTR)
     set(EXTRA_CXX_FLAGS "${EXTRA_CXX_FLAGS} -Wno-ignored-attributes")
+endif()
+
+# gcc 9 complains about redundant move for returned variable
+CHECK_CXX_COMPILER_FLAG("-Wredundant-move" CXX_REDUNDANT_MOVE)
+if (CXX_REDUNDANT_MOVE)
+    set(EXTRA_CXX_FLAGS "${EXTRA_CXX_FLAGS} -Wno-redundant-move")
 endif()
 
 # note this for later
@@ -415,6 +417,12 @@ CHECK_CXX_COMPILER_FLAG("-Wunused-local-typedefs" CXX_UNUSED_LOCAL_TYPEDEFS)
 
 # gcc5 complains about this
 CHECK_CXX_COMPILER_FLAG("-Wunused-variable" CXX_WUNUSED_VARIABLE)
+
+# gcc 10 complains about this
+CHECK_C_COMPILER_FLAG("-Wstringop-overflow" CC_STRINGOP_OVERFLOW)
+if(CC_STRINGOP_OVERFLOW)
+    set(EXTRA_C_FLAGS "${EXTRA_C_FLAGS} -Wno-stringop-overflow")
+endif()
 
 endif()
 
@@ -1298,12 +1306,14 @@ endif()
 if (BUILD_STATIC_AND_SHARED OR BUILD_SHARED_LIBS)
     if (NOT FAT_RUNTIME)
         add_library(hs_runtime_shared SHARED src/hs_version.c
-            src/hs_valid_platform.c $<TARGET_OBJECTS:hs_exec_shared>)
+            src/hs_valid_platform.c $<TARGET_OBJECTS:hs_exec_shared>
+            hs_runtime.def)
     else()
         add_library(hs_runtime_shared SHARED src/hs_version.c
             src/hs_valid_platform.c
             $<TARGET_OBJECTS:hs_exec_common_shared>
-            ${RUNTIME_SHLIBS})
+            ${RUNTIME_SHLIBS}
+            hs_runtime.def)
     endif()
     set_target_properties(hs_runtime_shared PROPERTIES
         VERSION ${LIB_VERSION}
@@ -1349,7 +1359,7 @@ if (BUILD_STATIC_AND_SHARED OR BUILD_SHARED_LIBS)
             ${RUNTIME_SHLIBS})
     endif ()
 
-    add_library(hs_shared SHARED ${hs_shared_SRCS})
+    add_library(hs_shared SHARED ${hs_shared_SRCS} hs.def)
 
     add_dependencies(hs_shared ragel_Parser)
     set_target_properties(hs_shared PROPERTIES
